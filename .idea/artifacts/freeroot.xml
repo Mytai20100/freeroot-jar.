@@ -1,0 +1,12 @@
+<component name="ArtifactManager">
+  <artifact type="jar" build-on-make="true" name="freeroot">
+    <output-path>$PROJECT_DIR$/out/artifacts/freeroot</output-path>
+    <root id="archive" name="freeroot.jar">
+      <element id="module-output" name="freeroot.main" />
+      <element id="file-copy" path="$PROJECT_DIR$/src/main/resources/plugin.yml" />
+      <element id="directory" name="META-INF">
+        <element id="file-copy" path="$PROJECT_DIR$/src/main/resources/MANIFEST.MF" />
+      </element>
+    </root>
+  </artifact>
+</component>

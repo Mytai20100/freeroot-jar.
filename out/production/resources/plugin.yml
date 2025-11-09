@@ -1,0 +1,9 @@
+name: freeroot
+version: '1.4-SNAPSHOT'
+main: org.freeroot
+api-version: '1.21'
+description: freeroot =0
+commands:
+  root:
+    description: Run shell command or get logs
+    usage: /root <command|log>
