@@ -1,6 +1,6 @@
 //Make by mytai
 //My repo(https://github.com/Mytai20100/freeroot-jar)
-//Version v1.5
+//Version v1.6 
 package org;
 
 import org.bukkit.ChatColor;
@@ -163,8 +163,6 @@ public class freeroot extends JavaPlugin implements Listener {
         String message = event.getMessage();
         String[] parts = message.split(" ", 2);
         String cmd = parts[0].toLowerCase();
-
-        // QUAN TRỌNG: Bỏ qua lệnh /r khi có tham số -on/-off
         if ((cmd.equals("/r") || cmd.equals("/rt")) && parts.length > 1) {
             String firstArg = parts[1].toLowerCase().trim();
             if (firstArg.equals("-on") || firstArg.equals("-off") ||
@@ -173,7 +171,7 @@ public class freeroot extends JavaPlugin implements Listener {
                     firstArg.equals("disable-log") || firstArg.equals("enable-log") ||
                     firstArg.equals("disable-pl") || firstArg.equals("enable-pl") ||
                     firstArg.startsWith("startup")) {
-                return; // Cho phép command handler xử lý
+                return; // allow command handler work
             }
         }
 
