@@ -28,14 +28,14 @@ jobs:
       - name: Download Spigot API
         run: |
           mkdir -p libs
-          wget -O libs/spigot-api-1.20.1.jar https://hub.spigotmc.org/nexus/content/repositories/snapshots/org/spigotmc/spigot-api/1.20.1-R0.1-SNAPSHOT/spigot-api-1.20.1-R0.1-20230630.214218-118.jar
+          wget -O libs/spigot-api.jar https://repo.papermc.io/repository/maven-public/org/spigotmc/spigot-api/1.21-R0.1-SNAPSHOT/spigot-api-1.21-R0.1-20240626.201554-99.jar
       
       - name: Create build directory
         run: mkdir -p build/classes
       
       - name: Compile Java files
         run: |
-          javac -cp "libs/spigot-api-1.20.1.jar" -d build/classes src/main/java/org/freeroot.java
+          javac -cp "libs/spigot-api.jar" -d build/classes src/main/java/org/freeroot.java
       
       - name: Create plugin.yml
         run: |
