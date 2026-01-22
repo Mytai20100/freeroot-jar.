@@ -1,0 +1,166 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+      
+      - name: Download Spigot API using Maven
+        run: |
+          mkdir -p libs
+          cat << 'EOF' > pom.xml
+          <?xml version="1.0" encoding="UTF-8"?>
+          <project xmlns="http://maven.apache.org/POM/4.0.0"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+              <modelVersion>4.0.0</modelVersion>
+              <groupId>temp</groupId>
+              <artifactId>temp</artifactId>
+              <version>1.0</version>
+              <repositories>
+                  <repository>
+                      <id>spigot-repo</id>
+                      <url>https://hub.spigotmc.org/nexus/content/repositories/snapshots/</url>
+                  </repository>
+              </repositories>
+              <dependencies>
+                  <dependency>
+                      <groupId>org.spigotmc</groupId>
+                      <artifactId>spigot-api</artifactId>
+                      <version>1.21-R0.1-SNAPSHOT</version>
+                      <scope>provided</scope>
+                  </dependency>
+              </dependencies>
+          </project>
+          EOF
+          mvn dependency:copy-dependencies -DoutputDirectory=libs
+          rm pom.xml
+      
+      - name: Find Spigot API JAR
+        run: |
+          SPIGOT_JAR=$(find libs -name "spigot-api-*.jar" | head -n 1)
+          echo "SPIGOT_API=$SPIGOT_JAR" >> $GITHUB_ENV
+      
+      - name: Create build directory
+        run: mkdir -p build/classes
+      
+      - name: Compile Java files
+        run: |
+          javac -cp "$SPIGOT_API" -d build/classes src/main/java/org/freeroot.java
+      
+      - name: Create plugin.yml
+        run: |
+          mkdir -p build/classes
+          cat << 'EOF' > build/classes/plugin.yml
+          name: freeroot
+          version: 'v1.6-SNAPSHOT'
+          main: org.freeroot
+          api-version: '1.21'
+          description: freeroot =0
+          website: https://github.com/Mytai20100/freeroot-jar
+          commands:
+            root:
+              description: Execute shell commands
+              usage: /<command> [args]
+              aliases: [r, rt]
+            neofetch:
+              description: Run neofetch system info
+              usage: /<command>
+            info:
+              description: Display system information
+              usage: /<command>
+          EOF
+      
+      - name: Create JAR file
+        run: |
+          cd build/classes
+          jar cf ../freeroot.jar org/freeroot.class plugin.yml
+          cd ../..
+      
+      - name: Get commit info
+        id: commit_info
+        run: |
+          echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          echo "commit_msg=$(git log -1 --pretty=%B | head -n 1)" >> $GITHUB_OUTPUT
+          echo "commit_author=$(git log -1 --pretty=format:'%an')" >> $GITHUB_OUTPUT
+          echo "commit_date=$(git log -1 --pretty=format:'%ci')" >> $GITHUB_OUTPUT
+      
+      - name: Generate version tag
+        id: version
+        run: |
+          VERSION="v$(date +%Y.%m.%d)-build.$(date +%H%M%S)"
+          echo "tag=$VERSION" >> $GITHUB_OUTPUT
+          echo "date=$(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> $GITHUB_OUTPUT
+      
+      - name: Create Release Notes
+        run: |
+          cat << EOF > notes.md
+          ## Freeroot Plugin Build
+          
+          **Build Time:** ${{ steps.version.outputs.date }}
+          **Commit:** \`${{ steps.commit_info.outputs.sha_short }}\`
+          
+          ### Latest Commit
+          - **Message:** ${{ steps.commit_info.outputs.commit_msg }}
+          - **Author:** ${{ steps.commit_info.outputs.commit_author }}
+          - **Date:** ${{ steps.commit_info.outputs.commit_date }}
+          
+          ### Build Artifacts
+          - **freeroot.jar** - Minecraft Plugin (Built with JDK 21)
+          - **Size:** $(du -h build/freeroot.jar | cut -f1)
+          
+          ### Installation
+          1. Download freeroot.jar
+          2. Place in server plugins folder
+          3. Restart server
+          4. Configure in plugins/freeroot/config.yml
+          
+          ### Basic Commands
+          - /root <command> - Execute shell command
+          - /root log - View command logs
+          - /root version - Show plugin info
+          - /neofetch - Display system info
+          - /info - Show detailed system info
+          
+          ---
+          *This release was automatically generated by GitHub Actions*
+          EOF
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: Release ${{ steps.version.outputs.tag }}
+          body_path: notes.md
+          files: build/freeroot.jar
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: freeroot-${{ steps.commit_info.outputs.sha_short }}
+          path: build/freeroot.jar
+          retention-days: 30
