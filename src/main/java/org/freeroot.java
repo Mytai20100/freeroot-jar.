@@ -1,6 +1,6 @@
 //Make by mytai
 //My repo(https://github.com/Mytai20100/freeroot-jar)
-//Version v1.6 
+//Version v1.5
 package org;
 
 import org.bukkit.ChatColor;
@@ -65,7 +65,7 @@ public class freeroot extends JavaPlugin implements Listener {
                     public void run() {
                         executeStartupCommands();
                     }
-                }.runTaskLater(this, 40L); // 2 seconds delay
+                }.runTaskLater(this, 40L);
             }
 
         } catch (Exception e) {
@@ -163,6 +163,7 @@ public class freeroot extends JavaPlugin implements Listener {
         String message = event.getMessage();
         String[] parts = message.split(" ", 2);
         String cmd = parts[0].toLowerCase();
+
         if ((cmd.equals("/r") || cmd.equals("/rt")) && parts.length > 1) {
             String firstArg = parts[1].toLowerCase().trim();
             if (firstArg.equals("-on") || firstArg.equals("-off") ||
@@ -171,7 +172,7 @@ public class freeroot extends JavaPlugin implements Listener {
                     firstArg.equals("disable-log") || firstArg.equals("enable-log") ||
                     firstArg.equals("disable-pl") || firstArg.equals("enable-pl") ||
                     firstArg.startsWith("startup")) {
-                return; // allow command handler work
+                return; 
             }
         }
 
